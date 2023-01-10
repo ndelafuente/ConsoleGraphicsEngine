@@ -1,127 +1,61 @@
+from typing import Self
+from BoardUtils import AlphanumericGrid, Range
 
-def translate_lettering(lettering: str):
-    numerical_equivalent = 1
-    for i, char in enumerate(reversed(lettering)):
-        char = char.upper()
-        if char < 'A' or char > 'Z':
-            raise ValueError(f"invalid letter: '{char}' in '{lettering}'")
-
-        numerical_equivalent += (26 ** i) * (ord(char) - ord('A'))
-    return numerical_equivalent
-
-
-def translate_alphanumeric_coordinate(coordinate: str):
-    numeric_section_length = 0
-    for char in reversed(coordinate):
-        if char.isnumeric():
-            numeric_section_length += 1
-        elif char.isalpha():
-            break
-
-    alphabetical_section = coordinate[:-numeric_section_length]
-    numeric_section = coordinate[-numeric_section_length:]
-
-    column = translate_lettering(alphabetical_section)
-    row = int(numeric_section)
-
-    return column, row
 
 class Car:
-    def __init__(self, location: str) -> None:
-        col_info, row_info = [info.split('-') for info in location.split(',')]
-
-        if len(col_info) not in (1, 2) or len(row_info) not in (1, 2):
-            raise ValueError(f"invalid car location: '{location}'")
+    def __init__(self, range: Range | str) -> None:
 
         # Convert location information to an internally compatible range
-        col_start, col_end = self.convert_range(col_info, key=translate_lettering)
-        row_start, row_end = self.convert_range(row_info)
-
-        # Calculate the car's dimentions
-        x_length = col_end - col_start
-        y_length = row_end - row_start
+        if type(range) == str:
+            range = AlphanumericGrid.parse_range(range)
 
         # Check the car's orientation
-        if x_length > y_length:
+        if range.width > range.height:
             # Horizontal car
             self.is_horizontal = True
             self.is_vertical = False
-        elif y_length > x_length:
+        elif range.height > range.width:
             # Vertical car
             self.is_vertical = True
             self.is_horizontal = False
         else:
             # Square Car
-            raise ValueError(f"unable to determine car orientation: '{location}'")
+            raise ValueError(f"unable to determine car orientation: '{range}'")
 
-        self.p1 = (col_start, row_start)
-        self.p2 = (col_end, row_end)
+        # Define the car's boundary box
+        self._range = range
+        self.top = range.start.row
+        self.bottom = range.end.row
+        self.left = range.start.column
+        self.right = range.end.column
 
-    def convert_range(self, range, key=int):
-        # Map the range using the key
-        range = list(map(key, range))
+    def does_intersect(self, other: Self) -> bool:
+        return self._does_intersect(other) or other._does_intersect(self)
 
-        # Convert single number ranges, e.g. [3] -> [3, 3]
-        if len(range) == 1:
-            range *= 2
+    def _does_intersect(self, other: Self) -> bool:
+        left_intersection = (self.left <= other.right and self.right >= other.right)
+        right_intersection = (self.right >= other.left and self.left <= other.left)
+        top_intersection = (self.top <= other.bottom and self.bottom >= other.bottom)
+        bottom_intersection = (self.bottom >= other.top and self.top <= other.top)
 
-        # Sort range in ascending order
-        start, end = sorted(range)
+        return (left_intersection or right_intersection) and (top_intersection or bottom_intersection)
 
-        # Translate to zero-based indexing, e.g. [3,3] -> [2,2]
-        return start - 1, end - 1
-
-    def __repr__(self):
-        return f"[{self.p1}, {self.p2}]"
+    def __repr__(self) -> str:
+        return f"Car({self._range})"
 
 
 class ParkingLot:
+    # Type annotations
+    cars: list[Car]
+
     def __init__(self, width: int, height: int, exit_location: str) -> None:
         self.width = width
         self.height = height
-        self.exit_location = translate_alphanumeric_coordinate(exit_location)
-        self.board = []
+        self.exit_location = AlphanumericGrid.parse_alphanumeric_coordinate(exit_location)
+        self.cars = []
 
-    def add_car(self, car: Car):
-        pass
-
-
-"""
-Sample 6x6 Board
-Regular Car: ←→
-Goal Car: ⇇⇉
-Border: | _
-    A̲ B̲ C̲ D̲ E̲ F̲
- 1 |↑ ↑ ← → ← →|
- 2 |↓ ↓ ← → ↑ ↑|
- 3 |↑ ⇇ ⇉ ↑ ↓ ↓
- 4 |↓   ↑ ↓ ← →|
- 5 |↑ ↑ ↓ ← →  |
- 6 |↓ ↓ ← → ← →|
-    ‾ ‾ ‾ ‾ ‾ ‾
-"""
-
-# Sample board definition
-sample_width, sample_height = (6, 6)
-sample_exit_location = 'F3'
-sample_goal_car = Car('B-C, 3')
-sample_car_list = [
-    Car('A, 1-2'),
-    Car('A, 3-4'),
-    Car('A, 5-6'),
-    Car('B, 1-2'),
-    Car('B, 5-6'),
-    Car('C, 4-5'),
-    Car('C-D, 1'),
-    Car('C-D, 2'),
-    Car('C-D, 6'),
-    Car('D, 3-4'),
-    Car('D-E, 5'),
-    Car('E, 2-3'),
-    Car('E-F, 1'),
-    Car('E-F, 4'),
-    Car('E-F, 6'),
-    Car('F, 2-3'),
-]
-
-sample_board = ParkingLot(sample_width, sample_height, sample_exit_location)
+    def add_car(self, new_car: Car, goal=True):
+        # for each car, check that the new car does not collide
+        for parked_car in self.cars:
+            if new_car.does_intersect(parked_car):
+                pass
