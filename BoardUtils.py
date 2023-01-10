@@ -103,23 +103,23 @@ class AlphanumericGrid:
             case [coord]:  # e.g. A3
                 match categorize(coord):
                     case Is.ALPHANUMERIC:
-                        coord = cls.parse_alphanumeric_coordinate(coord)
+                        coord = cls.parse_alphanumeric_coord(coord)
                         return Range(coord, coord)
                     case _:
                         raise ValueError(f"invalid single coordinate range: '{range}'")
             case [start, end]:
                 match categorize(start), categorize(end):
                     case Is.ALPHANUMERIC, Is.NUMERIC:  # e.g. A1-2
-                        start = cls.parse_alphanumeric_coordinate(start)
+                        start = cls.parse_alphanumeric_coord(start)
                         end_row = int(end) - 1
                         end = Location(start.column, end_row)
                     case Is.ALPHA, Is.ALPHANUMERIC:  # e.g. A-B1
-                        end = cls.parse_alphanumeric_coordinate(end)
+                        end = cls.parse_alphanumeric_coord(end)
                         start_col = cls.translate_lettering(start) - 1
                         start = Location(start_col, end.row)
                     case Is.ALPHANUMERIC, Is.ALPHANUMERIC:  # e.g. A1-B2
-                        start = cls.parse_alphanumeric_coordinate(start)
-                        end = cls.parse_alphanumeric_coordinate(end)
+                        start = cls.parse_alphanumeric_coord(start)
+                        end = cls.parse_alphanumeric_coord(end)
                     case _:
                         raise ValueError("invalid alphanumeric range")
                 return Range(start, end)
@@ -130,7 +130,7 @@ class AlphanumericGrid:
                                  f"received {range.count(sep)}: {range}")
 
     @classmethod
-    def parse_alphanumeric_coordinate(cls, coordinate: str) -> Location:
+    def parse_alphanumeric_coord(cls, coordinate: str) -> Location:
         numeric_section_length = 0
         for char in reversed(coordinate):
             if char.isnumeric():

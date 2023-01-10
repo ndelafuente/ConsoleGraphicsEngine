@@ -44,15 +44,25 @@ class Car:
 class ParkingLot:
     # Type annotations
     cars: list[Car]
+    goal_car: Car
 
     def __init__(self, width: int, height: int, exit_location: str) -> None:
         self.width = width
         self.height = height
-        self.exit_location = AlphanumericGrid.parse_alphanumeric_coordinate(exit_location)
+        self.exit_location = AlphanumericGrid.parse_alphanumeric_coord(exit_location)
+        self.goal_car = None
         self.cars = []
 
     def add_car(self, new_car: Car, goal=True):
-        # for each car, check that the new car does not collide
+        # Check that the new car does not collide with any of the existing cars
         for parked_car in self.cars:
             if new_car.does_intersect(parked_car):
-                pass
+                raise ValueError(f"Car {new_car} cannot fit into the parking lot")
+
+        if goal:
+            if self.goal_car is not None:
+                self.goal_car = new_car
+            else:
+                raise ValueError("Goal car has already been set")
+        else:
+            self.cars.append(new_car)
