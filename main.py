@@ -30,15 +30,12 @@ class Car:
         self.right = range.end.column
 
     def does_intersect(self, other: Self) -> bool:
-        return self._does_intersect(other) or other._does_intersect(self)
-
-    def _does_intersect(self, other: Self) -> bool:
-        left_intersection = (self.left <= other.right and self.right >= other.right)
-        right_intersection = (self.right >= other.left and self.left <= other.left)
-        top_intersection = (self.top <= other.bottom and self.bottom >= other.bottom)
-        bottom_intersection = (self.bottom >= other.top and self.top <= other.top)
-
-        return (left_intersection or right_intersection) and (top_intersection or bottom_intersection)
+        return not (
+            self.left > other.right or
+            self.right < other.left or
+            self.top > other.bottom or
+            self.bottom < other.top
+        )
 
     def __repr__(self) -> str:
         return f"Car({self._range})"
