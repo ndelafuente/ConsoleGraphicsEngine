@@ -29,19 +29,18 @@ def main(win: curses.window):
         if ch == ord('d'):
             DEBUG = not DEBUG
 
-        if DEBUG:
-            # Debugging
-            win.clear()
-            win.addstr(0, 0, f"max x,y: {tuple(reversed(win.getmaxyx()))}")
-            win.addstr(1, 0, f"has_colors: {curses.has_colors()}")
-            win.addstr(2, 0, f"can_change_color: {curses.can_change_color()}")
-            win.addstr(3, 0, f"has_extended_color_support: "
-                       f"{curses.has_extended_color_support()}")
-            time.sleep(0.05)
-            continue
-
         if ch == curses.KEY_MOUSE:
             win.clear()
+            max_y, max_x = win.getmaxyx()
+
+            if DEBUG:
+                # Debugging
+                win.addstr(max_y - 4, 0, f"max x,y: {tuple(reversed(win.getmaxyx()))}")
+                win.addstr(max_y - 3, 0, f"has_colors: {curses.has_colors()}")
+                win.addstr(max_y - 2, 0, f"can_change_color: {curses.can_change_color()}")
+                win.addstr(max_y - 1, 0, f"has_extended_color_support: "
+                           f"{curses.has_extended_color_support()}")
+
             _, x, y, _, button = curses.getmouse()
             canvas_x, canvas_y = canvas.virtualize(x, y)
             win.addstr(0, 0, str((x, y, bin(button), i)))
@@ -50,26 +49,33 @@ def main(win: curses.window):
             elif button & curses.BUTTON1_PRESSED:
                 pass
             elif button & curses.BUTTON1_CLICKED:
-                canvas.draw_circle(canvas_x, canvas_y, j)
-                j = (j + 1) % 9
+                canvas.draw_circle(canvas_x, canvas_y, j, curses.color_pair(i))
+                j = (j + 1) % (min(max_x, max_y) // 2)
             elif button & curses.BUTTON1_DOUBLE_CLICKED:
                 pass
             elif button & curses.BUTTON1_TRIPLE_CLICKED:
                 pass
             elif button & curses.REPORT_MOUSE_POSITION:
-                canvas.draw_box(canvas_x, canvas_y, 1.5, 1, curses.color_pair(i))
+                canvas.draw_box(canvas_x, canvas_y, 3, 3, curses.color_pair(i))
                 i = (i + 1) % curses.COLORS
             win.refresh()
 
 
-def safe_round(number):
-    sign = 1 if number >= 0 else -1
-    number = abs(number)
-    fractional_part = int(number) - number
-    if fractional_part < 0.5:
-        return int(number)
+def bound(number, min=0, max=None):
+    if number < min:
+        return min
+    if max is not None and number > max:
+        return max
+    return number
+
+
+def stable_round(number):
+    integer_part = int(number)
+    fractional_part = integer_part - number
+    if fractional_part >= 0.5:
+        return integer_part
     else:
-        return int(number) + 1
+        return integer_part + 1
 
 
 class VirtualCanvas:
@@ -88,64 +94,105 @@ class VirtualCanvas:
     def virtualize(self, actual_x, actual_y):
         return actual_x / self.x_scale, actual_y / self.y_scale
 
-    def color_pixel(self, x, y, color):
-        max_y, max_x = self.screen.getmaxyx()
-        self.screen.addstr(self.p, 80, f"{x,y}")
+    # def safe_color_pixel(self, x, y, color):
+    #     max_y, max_x = self.screen.getmaxyx()
+    #     raw_x, raw_y = x, y
+    #     x, y = stable_round(x), stable_round(y)
+    #     if x >= 0 and x < max_x and y >= 0 and y < max_y:
+    #         self.screen.chgat(y, x, 1, color)
 
+    #         if DEBUG:
+    #             self.safe_print(self.p, 100, f"{raw_x, raw_y}")
+    #             self.safe_print(self.p, 120, f"{x, y}")
+    #             self.p += 1
+
+    def color_virtual_pixel(self, x, y, color):
+        if DEBUG:
+            self.safe_print(self.p, 80, f"{x,y}")
+
+        max_y, max_x = self.screen.getmaxyx()
         for n in range(self.x_scale):
             for m in range(self.y_scale):
                 raw_x = (x * self.x_scale + n)
                 raw_y = (y * self.y_scale + m)
 
-                actual_x = safe_round(raw_x)
-                actual_y = safe_round(raw_y)
+                actual_x = stable_round(raw_x)
+                actual_y = stable_round(raw_y)
                 if actual_x >= 0 and actual_x < max_x and actual_y >= 0 and actual_y < max_y:
                     self.screen.chgat(actual_y, actual_x, 1, color)
 
-                    self.screen.addstr(self.p, 100, f"{raw_x, raw_y}")
-                    self.screen.addstr(self.p, 120, f"{actual_x, actual_y}")
-                    self.p += 1
+                    if DEBUG:
+                        self.safe_print(self.p, 100, f"{raw_x, raw_y}")
+                        self.safe_print(self.p, 120, f"{actual_x, actual_x}")
+                        self.p += 1
 
-    def draw_hline(self, start_x, y, length, color):
+    def safe_print(self, row: int, col: int, str: str):
+        if row >= 0 and row < self.max_y:
+            self.screen.addstr(row, col, str)
 
-        x = start_x
-        end = start_x + length
-        step = 1 / self.x_scale
-        while x < end:
-            self.color_pixel(x, y, color)
-            x += step
+    def devirtualize_x(self, virtual_x):
+        actual_x = stable_round(virtual_x * self.x_scale)
+        return bound(actual_x, max=self.max_x)
 
-        # for n in range(round(length)):
-        #     # n /= self.x_scale
-        #     self.color_pixel(start_x + n, y, color)
+    def devirtualize_y(self, virtual_y):
+        actual_y = stable_round(virtual_y * self.y_scale)
+        return bound(actual_y, max=self.max_y)
+
+    def draw_hline(self, x, y, length, color):
+        max_y, max_x = self.screen.getmaxyx()
+        approximate_pixel_count = self.devirtualize_x(length)
+        x = self.devirtualize_x(x)
+        y = self.devirtualize_y(y)
+        if x >= 0 and x < max_x and y >= 0 and y < max_y:
+            self.screen.chgat(y, x, approximate_pixel_count, color)
+
+            if DEBUG:
+                # self.safe_print(7, 0, f"{x, y, approximate_pixel_count}")
+                self.p += approximate_pixel_count
 
     def draw_box(self, center_x, center_y, x_len, y_len, color):
         self.p = 0
-        x = center_x - (x_len - 1) / 2
-        y = center_y - (y_len - 1) / 2
-        self.screen.addstr(1, 0, f"Center: {center_x, center_y}")
-        self.screen.addstr(2, 0, f"Start:  {x, y}")
-        for m in range(round(y_len)):
+        x = center_x - (x_len - self.x_scale) / 2
+        y = center_y - (y_len - self.y_scale) / 2
+        for m in range(stable_round(y_len)):
             self.draw_hline(x, y + m, x_len, color)
-        self.screen.addstr(3, 0, f"Pixels drawn: {self.p}")
-        self.screen.addstr(4, 0, "0123456789")
 
-    def draw_circle(self, center_x, center_y, radius):
-        self.p = 0
+        if DEBUG:
+            self.safe_print(1, 0, f"Box: {x_len} by {y_len}")
+            self.safe_print(2, 0, f"Center: {center_x, center_y}")
+            self.safe_print(3, 0, f"Start:  {x, y}")
+            self.safe_print(4, 0, f"Pixels drawn: {self.p}")
+            self.safe_print(6, 1, " 123456789")
+            for i in range(1, 6):
+                self.screen.addch(6+i, 1, str(i))
+
+    def draw_circle(self, center_x, center_y, radius, color):
+        """
+        Adapted from Geeks for Geeks: "Mid-Point Circle Drawing Algorithm"
+        https://geeksforgeeks.org/mid-point-circle-drawing-algorithm/
+        """
+
+        if DEBUG:
+            self.safe_print(1, 0, f"Circle")
+            self.safe_print(2, 0, f"Center: {center_x, center_y}")
+            self.safe_print(3, 0, f"Radius: {radius}")
+            self.p = 0
+
         x = radius
         y = 0
-        self.screen.clear()
-        color = curses.color_pair(1)
-        # Printing the initial point the
-        # axes after translation
-        self.color_pixel(x + center_x, y + center_y, color)
+
+        # Printing the initial point the axes after translation
+        if DEBUG:
+            color = curses.color_pair(1)
+        self.color_virtual_pixel(x + center_x, y + center_y, color)
 
         # When radius is zero only a single point will be printed
-        if (radius > 0):
+        if DEBUG:
             color = curses.color_pair(2)
-            self.color_pixel(-x + center_x, -y + center_y, color)
-            self.color_pixel(y + center_x, -x + center_y, color)
-            self.color_pixel(-y + center_x, x + center_y, color)
+        if (radius > 0):
+            self.color_virtual_pixel(-x + center_x, -y + center_y, color)
+            self.color_virtual_pixel(y + center_x, -x + center_y, color)
+            self.color_virtual_pixel(-y + center_x, x + center_y, color)
 
         # Initialising the value of P
         P = 1 - radius
@@ -163,29 +210,28 @@ class VirtualCanvas:
                 x -= 1
                 P = P + 2 * y - 2 * x + 1
 
-            # All the perimeter points have
-            # already been printed
+            # All the perimeter points have already been printed
             if (x < y):
                 break
 
             # Printing the generated point its reflection
             # in the other octants after translation
-            color = curses.color_pair(3)
-            self.color_pixel(x + center_x, y + center_y, color)
-            self.color_pixel(-x + center_x, y + center_y, color)
-            self.color_pixel(x + center_x, -y + center_y, color)
-            self.color_pixel(-x + center_x, -y + center_y, color)
+            if DEBUG:
+                color = curses.color_pair(3)
+            self.color_virtual_pixel(x + center_x, y + center_y, color)
+            self.color_virtual_pixel(-x + center_x, y + center_y, color)
+            self.color_virtual_pixel(x + center_x, -y + center_y, color)
+            self.color_virtual_pixel(-x + center_x, -y + center_y, color)
 
             # If the generated point on the line x = y then
             # the perimeter points have already been printed
             if x != y:
-                color = curses.color_pair(4)
-                self.color_pixel(y + center_x, x + center_y, color)
-                self.color_pixel(-y + center_x, x + center_y, color)
-                self.color_pixel(y + center_x, -x + center_y, color)
-                self.color_pixel(-y + center_x, -x + center_y, color)
-
-        self.screen.refresh()
+                if DEBUG:
+                    color = curses.color_pair(4)
+                self.color_virtual_pixel(y + center_x, x + center_y, color)
+                self.color_virtual_pixel(-y + center_x, x + center_y, color)
+                self.color_virtual_pixel(y + center_x, -x + center_y, color)
+                self.color_virtual_pixel(-y + center_x, -x + center_y, color)
 
 
 curses.wrapper(main)
