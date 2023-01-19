@@ -14,10 +14,10 @@ def main(win: curses.window):
     curses.use_default_colors()
     curses.mousemask(curses.ALL_MOUSE_EVENTS)
 
-    for i in range(1, curses.COLORS):
-        curses.init_pair(i, i, i)
+    for color_i in range(1, curses.COLORS):
+        curses.init_pair(color_i, color_i, color_i)
 
-    i = 0
+    color_i = 0
     j = 0
     canvas = VirtualCanvas(win)
     while True:
@@ -35,29 +35,39 @@ def main(win: curses.window):
 
             if DEBUG:
                 # Debugging
-                win.addstr(max_y - 4, 0, f"max x,y: {tuple(reversed(win.getmaxyx()))}")
-                win.addstr(max_y - 3, 0, f"has_colors: {curses.has_colors()}")
-                win.addstr(max_y - 2, 0, f"can_change_color: {curses.can_change_color()}")
-                win.addstr(max_y - 1, 0, f"has_extended_color_support: "
-                           f"{curses.has_extended_color_support()}")
+                canvas.safe_print(0, 0, str((x, y, bin(button), color_i)))
+                debug_info = [
+                    f"Max X, Y: {tuple(reversed(win.getmaxyx()))}",
+                    f"Has Colors: {curses.has_colors()}",
+                    f"Num Colors: {curses.COLORS}",
+                    f"Can Change Color: {curses.can_change_color()}"
+                ]
+                for row, info in enumerate(debug_info, -len(debug_info)):
+                    canvas.safe_print(row, 0, info)
+
+                grid_x = max_x // 4
+                grid_y = max_y // 2 - 5
+                canvas.safe_print(grid_y, grid_x, " 123456789")
+                for i in range(1, 9):
+                    canvas.safe_print(grid_y+i, grid_x, str(i))
+                color_i = 1
 
             _, x, y, _, button = curses.getmouse()
             canvas_x, canvas_y = canvas.virtualize(x, y)
-            win.addstr(0, 0, str((x, y, bin(button), i)))
             if button & curses.BUTTON1_RELEASED:
                 pass
             elif button & curses.BUTTON1_PRESSED:
                 pass
             elif button & curses.BUTTON1_CLICKED:
-                canvas.draw_circle(canvas_x, canvas_y, j, curses.color_pair(i))
+                canvas.draw_circle(canvas_x, canvas_y, j, curses.color_pair(color_i))
                 j = (j + 1) % (min(max_x, max_y) // 2)
             elif button & curses.BUTTON1_DOUBLE_CLICKED:
                 pass
             elif button & curses.BUTTON1_TRIPLE_CLICKED:
                 pass
             elif button & curses.REPORT_MOUSE_POSITION:
-                canvas.draw_box(canvas_x, canvas_y, 3, 3, curses.color_pair(i))
-                i = (i + 1) % curses.COLORS
+                canvas.draw_box(canvas_x, canvas_y, 3, 3, curses.color_pair(color_i))
+                color_i = (color_i + 1) % curses.COLORS
             win.refresh()
 
 
@@ -87,24 +97,10 @@ class VirtualCanvas:
         self.update_screen_size()
 
     def update_screen_size(self):
-        max_y, max_x = self.screen.getmaxyx()
-        self.max_x = max_x // self.x_scale
-        self.max_y = max_y // self.y_scale
+        self.max_y, self.max_x = self.screen.getmaxyx()
 
     def virtualize(self, actual_x, actual_y):
         return actual_x / self.x_scale, actual_y / self.y_scale
-
-    # def safe_color_pixel(self, x, y, color):
-    #     max_y, max_x = self.screen.getmaxyx()
-    #     raw_x, raw_y = x, y
-    #     x, y = stable_round(x), stable_round(y)
-    #     if x >= 0 and x < max_x and y >= 0 and y < max_y:
-    #         self.screen.chgat(y, x, 1, color)
-
-    #         if DEBUG:
-    #             self.safe_print(self.p, 100, f"{raw_x, raw_y}")
-    #             self.safe_print(self.p, 120, f"{x, y}")
-    #             self.p += 1
 
     def color_virtual_pixel(self, x, y, color):
         if DEBUG:
@@ -127,7 +123,12 @@ class VirtualCanvas:
                         self.p += 1
 
     def safe_print(self, row: int, col: int, str: str):
-        if row >= 0 and row < self.max_y:
+        if row < 0:
+            row += self.max_y
+        if col < 0:
+            col += self.max_x
+
+        if row >= 0 and row < self.max_y and col >= 0 and col < self.max_x:
             self.screen.addstr(row, col, str)
 
     def devirtualize_x(self, virtual_x):
@@ -162,9 +163,6 @@ class VirtualCanvas:
             self.safe_print(2, 0, f"Center: {center_x, center_y}")
             self.safe_print(3, 0, f"Start:  {x, y}")
             self.safe_print(4, 0, f"Pixels drawn: {self.p}")
-            self.safe_print(6, 1, " 123456789")
-            for i in range(1, 6):
-                self.screen.addch(6+i, 1, str(i))
 
     def draw_circle(self, center_x, center_y, radius, color):
         """
