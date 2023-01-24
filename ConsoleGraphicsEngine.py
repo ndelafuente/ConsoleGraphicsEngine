@@ -1,4 +1,4 @@
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 import time
 import curses
 import math
@@ -28,18 +28,20 @@ class Key(IntEnum):
     ALT_DELETE = 23  # CTRL + W
     DELETE = 127
     FN_DELETE = 330
-    FN_ALT_DELETE = 100  # preceded by ESC
-    FN_CMD_DELETE = 91  # preceded by ESC, followed by '3;9~'
     DOWN = 258
     UP = 259
     LEFT = 260
     RIGHT = 261
     CMD_LEFT = 1  # CTRL + A
     CMD_RIGHT = 5  # CTRL + E
-    ALT_LEFT = 98  # preceded by ESC
-    ALT_RIGHT = 102  # preceded by ESC
 
-# TODO separate out escape sequences into their own class
+
+class EscCode(StrEnum):
+    SEQ_START = "["
+    ALT_LEFT = "b"
+    ALT_RIGHT = "f"
+    FN_ALT_DELETE = "d"
+    FN_CMD_DELETE = "3;9~"
 
 
 def main(win: curses.window):
@@ -187,21 +189,27 @@ class VirtualCanvas:
 
                 case Key.ESC:
                     # Handle escape characters
-                    match self.screen.getch():
-                        case Key.ALT_LEFT:  # ESC + b
+                    match chr(self.screen.getch()):
+                        case EscCode.ALT_LEFT:
+                            # Move cursor to the beginning of previous word
                             new_x = find_prev_word(curr_input, cursor_i)
                             self.screen.move(cursor_y, input_start + new_x)
-                        case Key.ALT_RIGHT:  # ESC + f
+                        case EscCode.ALT_RIGHT:
+                            # Move cursor to the beginning of next word
                             new_x = find_next_word(curr_input, cursor_i)
                             self.screen.move(cursor_y, input_start + new_x)
-                        case Key.FN_ALT_DELETE:  # ESC + d
+                        case EscCode.FN_ALT_DELETE:
+                            # Delete next word
                             self.safe_print(row, input_start, " " * len(curr_input))
                             curr_input, _ = delete_next_word(curr_input, cursor_i)
                             self.safe_print(row, input_start, curr_input)
                             self.screen.move(cursor_y, cursor_x)
-                        case Key.FN_CMD_DELETE:  # ESC + [3;9~
-                            if self._match_sequence('3;9~'):
-                                pass  # TODO decide implementation
+                        case EscCode.SEQ_START if self._match_seq(EscCode.FN_CMD_DELETE):
+                            # Delete from cursor to end of line
+                            len_deleted = len(curr_input) - cursor_i
+                            curr_input = curr_input[:cursor_i]
+                            self.safe_print(row, cursor_x, " " * len_deleted)
+                            self.screen.move(cursor_y, cursor_x)
                         case Key.ESC | Key.NONE:
                             # Cancel
                             curr_input = ""
@@ -256,7 +264,7 @@ class VirtualCanvas:
 
         return curr_input
 
-    def _match_sequence(self, sequence: str):
+    def _match_seq(self, sequence: str):
         input = ''
         for _ in range(len(sequence)):
             input += chr(self.screen.getch())
