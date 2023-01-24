@@ -1,7 +1,7 @@
 from functools import total_ordering
 from typing import Self
 
-from StringUtils import Is, categorize
+from utils.string import Is, categorize
 
 INT_PAIR = tuple[int, int]
 
