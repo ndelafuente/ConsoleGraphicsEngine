@@ -17,3 +17,28 @@ n:
 - 1005 -> report back encoded as utf-8 (xterm, urxvt, broken in several ways)
 - 1006 -> report back as decimal values (xterm, many other terminal emulators, but not urxvt)
 - 1015 -> report back as decimal values (urxvt, xterm, other terminal emulators, some applications find it complex to parse)
+
+## Semigraphics
+https://en.wikipedia.org/wiki/Semigraphics
+
+### Unicode block elements ([Wikipedia](https://en.wikipedia.org/wiki/Block_Elements))
+```
+# Upper half
+'▀'
+# Lower 1/8 -> 7/8
+'▁▂▃▄▅▆▇'
+# Full block
+'█'
+# Left 7/8 -> 1/8
+'▉▊▋▌▍▎▏'
+# Right half
+'▐'
+# Light, medium, dark shade
+'░▒▓'
+# Upper 1/8
+'▔'
+# Right 1/8
+'▕'
+# Quadrants
+'▖▗▘▙▚▛▜▝▞▟'
+```
