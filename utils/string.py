@@ -69,7 +69,7 @@ def find_prev_word(str: str, start: int) -> int:
     return str[:start].rstrip().rfind(' ') + 1
 
 
-def delete_next_word(str: str, start: int) -> tuple(str, int):
+def delete_next_word(str: str, start: int) -> tuple[str, int]:
     """
     Delete from start to the end of the next word
     """
@@ -77,7 +77,7 @@ def delete_next_word(str: str, start: int) -> tuple(str, int):
     return str[:start] + str[del_end:], del_end
 
 
-def delete_prev_word(str: str, start: int) -> tuple(str, int):
+def delete_prev_word(str: str, start: int) -> tuple[str, int]:
     """
     Delete from start to the beginning of the previous word
     """

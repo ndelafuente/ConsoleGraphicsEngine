@@ -1,9 +1,45 @@
+from enum import IntEnum
 import time
 import curses
 import math
 
+from utils.integer import bound, stable_round
+from utils.string import (
+    delete_next_word,
+    delete_prev_word,
+    find_next_word,
+    find_prev_word,
+    str_delete,
+    str_insert,
+)
+
 global DEBUG
 DEBUG = False
+
+
+class Key(IntEnum):
+    NONE = -1
+    CTRL_D = 4
+    CTRL_X = 24
+    TAB = 9  # CTRL + I
+    ENTER = 10  # CTRL + J, CTRL + M
+    ESC = 27
+    CMD_DELETE = 21  # CTRL + U
+    ALT_DELETE = 23  # CTRL + W
+    DELETE = 127
+    FN_DELETE = 330
+    FN_ALT_DELETE = 100  # preceded by ESC
+    FN_CMD_DELETE = 91  # preceded by ESC, followed by '3;9~'
+    DOWN = 258
+    UP = 259
+    LEFT = 260
+    RIGHT = 261
+    CMD_LEFT = 1  # CTRL + A
+    CMD_RIGHT = 5  # CTRL + E
+    ALT_LEFT = 98  # preceded by ESC
+    ALT_RIGHT = 102  # preceded by ESC
+
+# TODO separate out escape sequences into their own class
 
 
 def main(win: curses.window):
@@ -64,28 +100,21 @@ def main(win: curses.window):
             elif button & curses.BUTTON1_DOUBLE_CLICKED:
                 pass
             elif button & curses.BUTTON1_TRIPLE_CLICKED:
-                pass
+                win.clear()
+                prompt = "Enter command to try: "
+                curr_input = canvas.input(0, 0, prompt)
+                if curr_input:
+                    try:
+                        res = eval(curr_input)
+                        canvas.safe_print(2, 0, f'{curr_input} = {res}')
+                    except BaseException as e:
+                        canvas.safe_print(2, 0, repr(e))
+                win.refresh()
+
             elif button & curses.REPORT_MOUSE_POSITION:
                 canvas.draw_box(canvas_x, canvas_y, 3, 3, curses.color_pair(color_i))
                 color_i = (color_i + 1) % curses.COLORS
             win.refresh()
-
-
-def bound(number, min=0, max=None):
-    if number < min:
-        return min
-    if max is not None and number > max:
-        return max
-    return number
-
-
-def stable_round(number):
-    integer_part = int(number)
-    fractional_part = integer_part - number
-    if fractional_part >= 0.5:
-        return integer_part
-    else:
-        return integer_part + 1
 
 
 class VirtualCanvas:
@@ -122,14 +151,118 @@ class VirtualCanvas:
                         self.safe_print(self.p, 120, f"{actual_x, actual_x}")
                         self.p += 1
 
-    def safe_print(self, row: int, col: int, str: str):
+    def safe_print(self, row: int, col: int, str: str, color=None):
         if row < 0:
             row += self.max_y
         if col < 0:
             col += self.max_x
 
         if row >= 0 and row < self.max_y and col >= 0 and col < self.max_x:
-            self.screen.addstr(row, col, str)
+            if color is not None:
+                self.screen.addstr(row, col, str, color)
+            else:
+                self.screen.addstr(row, col, str)
+
+    def input(self, row, col, prompt):
+        # Enter input mode
+        curses.mousemask(0)
+        curses.curs_set(1)
+        curses.flushinp()
+
+        curr_input = ""
+        unrecognized = []
+        input_start = len(prompt)
+        self.safe_print(row, col, prompt)
+        while True:
+            cursor_y, cursor_x = self.screen.getyx()
+            cursor_i = cursor_x - input_start
+            input_end = input_start + len(curr_input)
+
+            match self.screen.getch():
+                case Key.ENTER:
+                    break  # stop input loop
+
+                case Key.CTRL_D | Key.CTRL_X:
+                    exit()
+
+                case Key.ESC:
+                    # Handle escape characters
+                    match self.screen.getch():
+                        case Key.ALT_LEFT:  # ESC + b
+                            new_x = find_prev_word(curr_input, cursor_i)
+                            self.screen.move(cursor_y, input_start + new_x)
+                        case Key.ALT_RIGHT:  # ESC + f
+                            new_x = find_next_word(curr_input, cursor_i)
+                            self.screen.move(cursor_y, input_start + new_x)
+                        case Key.FN_ALT_DELETE:  # ESC + d
+                            self.safe_print(row, input_start, " " * len(curr_input))
+                            curr_input, _ = delete_next_word(curr_input, cursor_i)
+                            self.safe_print(row, input_start, curr_input)
+                            self.screen.move(cursor_y, cursor_x)
+                        case Key.FN_CMD_DELETE:  # ESC + [3;9~
+                            if self._match_sequence('3;9~'):
+                                pass  # TODO decide implementation
+                        case Key.ESC | Key.NONE:
+                            # Cancel
+                            curr_input = ""
+                            break
+                        case unknown:
+                            unrecognized.append((Key.ESC, unknown))
+
+                case Key.LEFT:
+                    if cursor_x > input_start:
+                        self.screen.move(cursor_y, cursor_x - 1)
+                case Key.RIGHT:
+                    if cursor_x < input_end:
+                        self.screen.move(cursor_y, cursor_x + 1)
+                case Key.CMD_LEFT:
+                    self.screen.move(cursor_y, input_start)
+                case Key.CMD_RIGHT:
+                    self.screen.move(cursor_y, input_end)
+
+                case Key.DELETE:
+                    # Erase character before current position
+                    if cursor_i > 0:
+                        curr_input = str_delete(curr_input, cursor_i - 1)
+                        self.screen.delch(cursor_y, cursor_x - 1)
+                case Key.ALT_DELETE:
+                    # Erase up to the start of the previous word
+                    self.safe_print(row, input_start, " " * len(curr_input))
+                    curr_input, del_start = delete_prev_word(curr_input, cursor_i)
+                    self.safe_print(row, input_start, curr_input)
+                    self.screen.move(cursor_y, input_start + del_start)
+                case Key.CMD_DELETE:
+                    # Completely erase input
+                    self.safe_print(row, input_start, " " * len(curr_input))
+                    self.screen.move(cursor_y, input_start)
+                    curr_input = ""
+
+                case c if c >= 32 and c < 127:
+                    curr_input = str_insert(curr_input, chr(c), cursor_i)
+                    self.screen.insch(cursor_y, cursor_x, chr(c))
+                    self.screen.move(cursor_y, cursor_x + 1)
+
+                case unknown if unknown >= 0:
+                    unrecognized.append(unknown)
+
+        # Restore normal mode
+        curses.mousemask(curses.ALL_MOUSE_EVENTS)
+        curses.curs_set(0)
+        curses.flushinp()
+
+        if DEBUG and len(unrecognized) > 0:
+            unrecognized = list(dict.fromkeys(unrecognized))
+            self.safe_print(row + 1, col, f"Unrecognized: {unrecognized}")
+
+        return curr_input
+
+    def _match_sequence(self, sequence: str):
+        input = ''
+        for _ in range(len(sequence)):
+            input += chr(self.screen.getch())
+            if not sequence.startswith(input):
+                return False
+        return sequence == input
 
     def devirtualize_x(self, virtual_x):
         actual_x = stable_round(virtual_x * self.x_scale)
@@ -148,13 +281,13 @@ class VirtualCanvas:
             self.screen.chgat(y, x, approximate_pixel_count, color)
 
             if DEBUG:
-                # self.safe_print(7, 0, f"{x, y, approximate_pixel_count}")
-                self.p += approximate_pixel_count
+                self.safe_print(self.p, 100, f"{x, y, approximate_pixel_count}")
+                self.p += 1
 
     def draw_box(self, center_x, center_y, x_len, y_len, color):
         self.p = 0
-        x = center_x - (x_len - self.x_scale) / 2
-        y = center_y - (y_len - self.y_scale) / 2
+        x = center_x - (x_len - 1) / 2
+        y = center_y - (y_len - 1) / 2
         for m in range(stable_round(y_len)):
             self.draw_hline(x, y + m, x_len, color)
 
@@ -162,7 +295,7 @@ class VirtualCanvas:
             self.safe_print(1, 0, f"Box: {x_len} by {y_len}")
             self.safe_print(2, 0, f"Center: {center_x, center_y}")
             self.safe_print(3, 0, f"Start:  {x, y}")
-            self.safe_print(4, 0, f"Pixels drawn: {self.p}")
+            self.safe_print(4, 0, f"Lines drawn: {self.p}")
 
     def draw_circle(self, center_x, center_y, radius, color):
         """
@@ -232,4 +365,5 @@ class VirtualCanvas:
                 self.color_virtual_pixel(-y + center_x, -x + center_y, color)
 
 
-curses.wrapper(main)
+if __name__ == "__main__":
+    curses.wrapper(main)
