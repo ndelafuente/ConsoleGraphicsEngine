@@ -42,3 +42,18 @@ https://en.wikipedia.org/wiki/Semigraphics
 # Quadrants
 '▖▗▘▙▚▛▜▝▞▟'
 ```
+
+# PNG Encoding
+- PNG basics: http://www.libpng.org/pub/png/book/chapter08.html
+- ISO Spec: http://www.libpng.org/pub/png/spec/iso/index-object.html
+> [F]or non-transparent, photographic images on the Web, use JPEG.
+- Understanding CRC: http://www.ross.net/crc/crcpaper.html
+
+# Lessons Learned
+- Python features that I didn't know existed
+    - Match-case statement
+    - Walrus operator (`:=`)
+
+# Future
+- Non-blocking getch? https://stackoverflow.com/questions/72072217/non-blocking-getch-in-curses
+- VirtualCanvas._match_seq: ungetch for each char read
