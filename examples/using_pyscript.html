@@ -1,12 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <!-- linking to PyScript assets -->
-    <link rel="stylesheet" href="https://pyscript.net/alpha/pyscript.css" />
-    <script defer src="https://pyscript.net/alpha/pyscript.js"></script>
-  </head>
-  <body>
-  <!-- Put Python code inside the the <py-script> tag -->
-    <py-script>print("Hello World!")</py-script>
-  </body>
+
+<head>
+  <!-- linking to PyScript assets -->
+  <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+  <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+  <py-config>
+    packages = ["matplotlib", "numpy"]
+
+    [[fetch]]
+    files = ["data.py"]
+
+    [splashscreen]
+    autoclose = true
+
+    [[runtimes]]
+    src = "https://cdn.jsdelivr.net/pyodide/v0.23.0a1/full/pyodide.js"
+    name = "pyodide-0.21.2"
+    lang = "python"
+  </py-config>
+</head>
+
+<body>
+  <h1>Plotting random numbers</h1>
+  <div id="plot"></div>
+  <py-script>
+    import matplotlib.pyplot as plt
+    from data import make_x_and_y
+    x, y = make_x_and_y(n=1000)
+    fig, ax = plt.subplots()
+    ax.scatter(x, y)
+    display(fig, target="plot")
+  </py-script>
+</body>
+
 </html>
