@@ -153,6 +153,9 @@ class VirtualCanvas:
                         self.safe_print(self.p, 120, f"{actual_x, actual_x}")
                         self.p += 1
 
+    def add_sprite(self, x, y, filename: str):
+        raise NotImplementedError # TODO
+
     def safe_print(self, row: int, col: int, str: str, color=None):
         if row < 0:
             row += self.max_y
