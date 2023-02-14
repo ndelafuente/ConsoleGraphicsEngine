@@ -136,6 +136,8 @@ class PngDecoder:
 
 
 def zlib_decompress(image_data):
+    print("zlib")
+    print("!")
     FCHECK, = struct.unpack_from(f'!H', image_data)
     assert FCHECK % 31 == 0
     ADLER32_S2, ADLER32_S1 = struct.unpack_from(f'!HH', image_data, -4)
@@ -155,6 +157,8 @@ def zlib_decompress(image_data):
     last_block = False
     while not last_block:
         last_block = bitstream.read(1)  # bfinal
+        if last_block:
+            print("last")
         block_type = bitstream.read(2)  # btype
 
         if (block_type == 0b00):  # no compression
@@ -163,24 +167,32 @@ def zlib_decompress(image_data):
             LEN = bitstream.read(16)
             NLEN = bitstream.read(16)
             assert LEN == ~NLEN
-            literal_data = bitstream.read(LEN)  # TODO copy data into decompressed
+            literal_data = bitstream.read_bytes(LEN)
+            decompressed.append(literal_data)
         elif (block_type == 0b11):  # reserved (error)
             raise ValueError("invalid block type")
         else:
             if (block_type == 0b10):  # compressed with dynamic Huffman codes
+                print("dynamic")
                 # Read representation of code trees
                 HLIT = bitstream.read(5) + 257  # number of Literal/Length codes
                 HDIST = bitstream.read(5) + 1  # number of Distance codes
                 HCLEN = bitstream.read(4) + 4  # number of Code Length codes
-                code_length_codes = tuple(bitstream.iter_read(HCLEN, 3))
-
-                CLC_ORDER = (
+                # clen_lengths = list(bitstream.iter_read(HCLEN, 3))
+                print("count", HLIT, HDIST, HCLEN)
+                CLEN_ORDER = (
                     16, 17, 18, 0, 8, 7, 9, 6, 10, 5,
                     11, 4, 12, 3, 13, 2, 14, 1, 15
                 )
+                clen_lengths = [0] * len(CLEN_ORDER)
+                for i in range(HCLEN):
+                    clen_lengths[CLEN_ORDER[i]] = bitstream.read(3)
+                cl = HuffmanTree(tuple(range(19)), clen_lengths)
 
-                # TODO read encoded HLIT code lengths for LL alphabet
-                # TODO read encoded HDIST code lengths for distance alphabet
+                # TODO refactor?
+                lit_code_lengths = bitstream.read_code_lengths(HLIT,  cl)
+                dist_code_lengths = bitstream.read_code_lengths(HDIST, cl)
+
                 breakpoint()
             while True:
                 value = bitstream.read()  # FIXME
@@ -188,33 +200,11 @@ def zlib_decompress(image_data):
                     break
 
 
-@dataclass
-class HuffmanCode:
-    symbol: int
-    length: int
-    __code: int = None
-
-    @property
-    def code(self):
-        if self.__code is None:
-            raise AttributeError(f"attribute 'code' has not been set")
-
-        return self.__code
-
-    @code.setter
-    def code(self, value):
-        self.__code = value
-
-
-@dataclass
-class HuffmanNode:
-    branch_0: Self | None = None
-    branch_1: Self | None = None
-    symbol: int | None = None
-
-
 class HuffmanTree:
     def __init__(self, alphabet: Sequence[int], code_lengths: Sequence[int]):
+        if len(alphabet) != len(code_lengths):
+            raise ValueError("alphabet and code lengths do not match up")
+
         # 1) Count the number of codes for each code length
         bl_count = Counter(code_lengths)
 
@@ -222,7 +212,7 @@ class HuffmanTree:
         code = 0
         bl_count[0] = 0
         next_code = {}
-        for bits in range(MAX_BITS := max(bl_count)):
+        for bits in range(max(bl_count)):
             code = (code + bl_count[bits]) << 1
             next_code[bits + 1] = code
 
@@ -233,77 +223,29 @@ class HuffmanTree:
         (which have a bit length of zero) must not be assigned a
         value.
         """
-        self._length_lookup = defaultdict(dict)  # mapping: {length: {code: symbol}}
-        tree = [HuffmanCode(sym, len) for sym, len in zip(alphabet, code_lengths)]
-        for node in tree:
-            if (node.length != 0):
-                node.code = next_code[node.length]
-                next_code[node.length] += 1
+        non_zero_code_lengths = [l for l in code_lengths if l != 0]
+        self.min_length = min(non_zero_code_lengths)
+        self.max_length = max(non_zero_code_lengths)
 
-                self._length_lookup[node.length][node.code] = node.symbol
+        self._codes_by_length = defaultdict(dict)  # mapping: {length: {code: symbol}}
+        for symbol, length in zip(alphabet, code_lengths):
+            if (length != 0):
+                code = next_code[length]
+                self._codes_by_length[length][code] = symbol
+                next_code[length] += 1
 
-        tree.sort(key=lambda node: node.length)
+    def contains(self, code: int, length: int) -> bool:
+        return code in self._codes_by_length[length]
 
-        # Build tree TODO evaluate for removal?
-        self.lookup_dict = {}  # mapping:: code: symbol
-        self.root = HuffmanNode()
-        for node in tree:
-            self.insert(node.symbol, node.code, node.length)
+    def get(self, code: int, length: int) -> int:
+        return self._codes_by_length[length][code]
 
-    def insert(self, symbol, code, length):
-        if code in self.lookup_dict:
-            raise ValueError("insertion clashes with existing symbol")
-        self.lookup_dict[code] = symbol
-
-        cur = self.root
-        for _ in range(length):
-            if (code & 0b1):
-                if cur.branch_1 is None:
-                    cur.branch_1 = HuffmanNode()
-                cur = cur.branch_1
-            else:
-                if cur.branch_0 is None:
-                    cur.branch_0 = HuffmanNode()
-                cur = cur.branch_0
-            code >>= 1
-        if cur.symbol is not None:
-            raise ValueError("insertion clashes with existing symbol")
-        cur.symbol = symbol
-
-    def __getitem__(self, code):
-        if isinstance(code, int):
-            return self.lookup_dict[code]
-        raise NotImplementedError(
-            f"{type(self).__name__} indices must be integers,"
-            f" not {type(code).__name__}"
-        )
-
-    def print(self):
-        self.print_recur(self.root)
-
-    def print_recur(self, cur: HuffmanNode, pre=''):
-        if cur.symbol:
-            print(cur.symbol, pre)
-        if cur.branch_0 is not None:
-            self.print_recur(cur.branch_0, '0'+pre)
-        if cur.branch_1 is not None:
-            self.print_recur(cur.branch_1, '1'+pre)
-
-    def of_length(self, length):
-        if length in self._length_lookup:
-            return self._length_lookup[length]
-        else:
-            return {}
-
-    def __contains__(self, code) -> bool:
-        return code in self.lookup_dict
-        cur = self.root
-        while True:
-            nex = cur.branch_1 if item & 0b1 else cur.branch_0
-            if nex is None:
-                return cur.symbol is not None
-            cur = nex
-            item >>= 1
+    def __repr__(self) -> str:
+        return str({
+            format(code, 'b').zfill(code_len): val
+            for code_len, codes in sorted(self._codes_by_length.items())
+            for code, val in codes.items()
+        })
 
 
 class BitBuffer:
@@ -327,25 +269,38 @@ class BitBuffer:
         return self.buffer[byte_index: byte_index + n]
 
     def read_huffman_code(self, tree: HuffmanTree):
+        for read_length in range(tree.min_length, tree.max_length + 1):
+            code = self._get(read_length, self.index)
+            code = int(format(code, 'b').zfill(read_length)[::-1], 2)
+            if tree.contains(code, read_length):
+                self.index += read_length
+                return tree.get(code, read_length), read_length
 
-        initial_index = self.index  # save index for later
+        raise KeyError("no matching huffman code could be found")
 
-        bits_read = tree[0].length  # minimum code length
-        value = self.read(bits_read)
+    def read_code_lengths(self, num_codes: int, tree: HuffmanTree):
+        lengths = []
+        while len(lengths) < num_codes:
+            code, read_len = self.read_huffman_code(tree)
 
-        max_len = tree[-1].length
-        while bits_read <= max_len:
-            next_bit = self.read(1)
-
-            for node in tree:
-                if node.code & (next_bit << bits_read):
-                    pass
-
-            bits_read += 1
-
-        # No match was found
-        self.index = initial_index
-        return None
+            match code:
+                case 16:
+                    prev_code = lengths[-1]
+                    rep_len = self.read(2) + 3
+                    print("lens", rep_len)
+                    lengths.extend([prev_code] * rep_len)
+                case 17:
+                    rep_len = self.read(3) + 3
+                    print("zeros", rep_len)
+                    lengths.extend([0] * rep_len)
+                case 18:
+                    rep_len = self.read(7) + 11
+                    print("zeros", rep_len)
+                    lengths.extend([0] * rep_len)
+                case _:
+                    print("lens", code)
+                    lengths.append(code)
+        return lengths
 
     def iter_read(self, times: int, n: int, offset: int = 0):
         for _ in range(times):
@@ -375,7 +330,7 @@ class BitBuffer:
         data = (self.buffer[byte_index] >> bit_offset) & self.BIT_MASKS[bit_count]
         byte_index += 1
 
-        # NOTE: Any further reads should be byte-aligned (bit offset == 0)
+        # NOTE: Any further reads will be byte-aligned (bit offset == 0)
 
         # Read any full bytes
         num_bytes, final_bits = divmod(n - bit_count, self.BYTE_LENGTH)
@@ -400,7 +355,8 @@ class BitBuffer:
                     f"{class_name} tuple indices must contain exactly two"
                     f" integers, i.e. <{class_name} object>[int, int]"
                 )
-            # TODO define behavior?
+            offset, length = key
+            return self._get(length, self.index + offset)
         if isinstance(key, slice):
             start, stop, stride = key.indices(self.len)
             start = self.len + start if start < 0 else start
