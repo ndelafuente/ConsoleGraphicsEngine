@@ -86,12 +86,19 @@ class PngDecoder:
                             rgb_sample = struct.unpack("!3H", data)
                         case 3:
                             alpha_samples = tuple(struct.iter_unpack("!B", data))
+                            alpha_samples = tuple(s[0] for s in alpha_samples)
+                            missing_samples = len(palette) - len(alpha_samples)
+                            if missing_samples > 0:
+                                alpha_samples += tuple([255] * missing_samples)
+                            elif missing_samples < 0:
+                                raise PngDecodeError("too many alpha samples provided")
                         case 4 | 6:
                             pass  # full aplpha channel is already present
                 case Iso.PRIMARY_CHROMATICITIES_AND_WHITE_POINT:
                     color_space_info = struct.unpack("!8I", data)
                 case Iso.IMAGE_GAMMA:
-                    image_gamma = struct.unpack("!I", data) * 100000
+                    image_gamma, = struct.unpack("!I", data)
+                    image_gamma *= 100000
                 case Iso.EMBEDDED_ICC_PROFILE:
                     # Compression method at compressed[0]
                     profile_name, _, compressed = data.partition(b'\0')
@@ -137,6 +144,19 @@ class PngDecoder:
                 print(f"decoded chunk {name}")
 
         image_data = zlib_decompress(image_data)
+        assert len(image_data) % height == 0
+        bb = BitBuffer(image_data)
+        image = []
+        for _ in range(height):
+            filter_type = bb.read(8)
+            if filter_type != 0:
+                raise NotImplementedError("unsupported filter method")
+            for pixel in bb.iter_read(width, bit_depth):
+                r, g, b = palette[pixel]
+                a = alpha_samples[pixel]
+                image.append((r, g, b, a))
+
+        self.image = image
 
 
 def zlib_decompress(image_data):
