@@ -3,9 +3,9 @@ import struct
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from io import SEEK_CUR, SEEK_SET, BufferedReader
-from typing import Self, Sequence
+from typing import Sequence
 
-INFGEN = True
+INFGEN = False
 
 
 class StrictBufferedReader(BufferedReader):
@@ -157,7 +157,7 @@ def zlib_decompress(image_data):
         raise NotImplementedError
 
     bitstream = BitBuffer(image_data[2:-4])
-    decompressed = []
+    decompressed = bytearray()
     last_block = False
     while not last_block:
         last_block = bitstream.read(1)  # bfinal
@@ -255,8 +255,9 @@ def zlib_decompress(image_data):
                     extra_bits, base_dist = DIST_EXTRA_BITS[dist_code]
                     dist = bitstream.read(extra_bits) + base_dist
 
+                    initial_length = len(decompressed)
                     for i in range(length):
-                        decompressed.append(decompressed[-dist + i])
+                        decompressed.append(decompressed[initial_length - dist + i])
 
                     if INFGEN:
                         print("match", length, dist)
@@ -265,14 +266,14 @@ def zlib_decompress(image_data):
     for byte in decompressed:
         s1 += byte
         s2 += s1
-    s1 = (1 + sum(decompressed)) % 65521
+    s1 %= 65521
     s2 %= 65521
+
+    assert ADLER32_S1 == s1
+    assert ADLER32_S2 == s2
 
     if INFGEN:
         print("\n!\nadler")
-    else:
-        print("adler s1", ADLER32_S1, s1)
-        print("adler s2", ADLER32_S2, s2)
 
     return decompressed
 
