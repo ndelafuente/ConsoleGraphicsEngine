@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from io import SEEK_CUR, SEEK_SET, BufferedReader
 from typing import Self, Sequence
 
+INFGEN = True
+
 
 class StrictBufferedReader(BufferedReader):
     def __init__(self, filename: str) -> None:
@@ -54,7 +56,8 @@ class PngDecoder:
                 else:
                     # Ignore unrecognized non-critical chunks
                     file.seek(length + Iso.SUB_CHUNK_SIZE, SEEK_CUR)
-                    print(f"ignoring chunk {name}")
+                    if not INFGEN:
+                        print(f"ignoring chunk {name}")
                     continue
 
             # Read chunk data
@@ -130,17 +133,18 @@ class PngDecoder:
                     time_last_modified = datetime(*struct.unpack("!H5B", data))
 
             self.chunks_read.append(name)
-            print(f"decoded chunk {name}")
+            if not INFGEN:
+                print(f"decoded chunk {name}")
 
         image_data = zlib_decompress(image_data)
 
 
 def zlib_decompress(image_data):
-    print("zlib")
-    print("!")
-    FCHECK, = struct.unpack_from(f'!H', image_data)
+    if INFGEN:
+        print('! infgen 3.0 output', '!', 'zlib', sep='\n')
+    FCHECK, = struct.unpack_from('!H', image_data)
     assert FCHECK % 31 == 0
-    ADLER32_S2, ADLER32_S1 = struct.unpack_from(f'!HH', image_data, -4)
+    ADLER32_S2, ADLER32_S1 = struct.unpack_from('!HH', image_data, -4)
 
     zlib_bitstream = BitBuffer(image_data[:2])
     CM = zlib_bitstream.read(4)
@@ -153,33 +157,33 @@ def zlib_decompress(image_data):
         raise NotImplementedError
 
     bitstream = BitBuffer(image_data[2:-4])
-    decompressed = bytearray()
+    decompressed = []
     last_block = False
     while not last_block:
         last_block = bitstream.read(1)  # bfinal
-        if last_block:
-            print("last")
         block_type = bitstream.read(2)  # btype
+
+        if INFGEN:
+            print("!")
+            if last_block:
+                print("last")
 
         if (block_type == 0b00):  # no compression
             bitstream.align_to_next_byte()
-            # TODO ensure correct bit order
             LEN = bitstream.read(16)
             NLEN = bitstream.read(16)
             assert LEN == ~NLEN
             literal_data = bitstream.read_bytes(LEN)
-            decompressed.append(literal_data)
+            decompressed.extend(literal_data)
         elif (block_type == 0b11):  # reserved (error)
             raise ValueError("invalid block type")
         else:
             if (block_type == 0b10):  # compressed with dynamic Huffman codes
-                print("dynamic")
                 # Read representation of code trees
                 HLIT = bitstream.read(5) + 257  # number of Literal/Length codes
                 HDIST = bitstream.read(5) + 1  # number of Distance codes
                 HCLEN = bitstream.read(4) + 4  # number of Code Length codes
-                # clen_lengths = list(bitstream.iter_read(HCLEN, 3))
-                print("count", HLIT, HDIST, HCLEN)
+
                 CLEN_ORDER = (
                     16, 17, 18, 0, 8, 7, 9, 6, 10, 5,
                     11, 4, 12, 3, 13, 2, 14, 1, 15
@@ -187,17 +191,90 @@ def zlib_decompress(image_data):
                 clen_lengths = [0] * len(CLEN_ORDER)
                 for i in range(HCLEN):
                     clen_lengths[CLEN_ORDER[i]] = bitstream.read(3)
-                cl = HuffmanTree(tuple(range(19)), clen_lengths)
+                cl = HuffmanTree(sorted(CLEN_ORDER), clen_lengths)
 
                 # TODO refactor?
                 lit_code_lengths = bitstream.read_code_lengths(HLIT,  cl)
                 dist_code_lengths = bitstream.read_code_lengths(HDIST, cl)
+                LITERAL_ALPHABET = tuple(range(256))  # 0..255 inclusive
+                LENGTH_ALPHABET = tuple(range(257, 285 + 1))  # 257..285 inclusive
+                lit_len_tree = HuffmanTree(tuple(range(HLIT)), lit_code_lengths)
+                dist_tree = HuffmanTree(tuple(range(HDIST)), dist_code_lengths)
 
-                breakpoint()
+                if INFGEN:
+                    print("dynamic")
+                    print("count", HLIT, HDIST, HCLEN)
+                    for v, l in lit_len_tree.pairs():
+                        print('! litlen', v, l)
+                    for v, l in dist_tree.pairs():
+                        print('! dist', v, l)
+            else:
+                raise NotImplementedError("have not yet implemented block type 0b01")
+
             while True:
-                value = bitstream.read()  # FIXME
-                if value == 256:  # end of block
+                code = bitstream.read_huffman_code(lit_len_tree)
+                if code == 256:  # end of block
+                    if INFGEN:
+                        print("end")
                     break
+                elif code < 256:  # literal
+                    decompressed.append(code)
+                    if INFGEN:
+                        if 32 <= code < 127:
+                            print(f"literal '{chr(code)}")
+                        else:
+                            print('literal', code)
+                else:  # length
+                    LENGTH_EXTRA_BITS = {
+                        257: (0, 3), 258: (0, 4), 259: (0, 5),
+                        260: (0, 6), 261: (0, 7), 262: (0, 8),
+                        263: (0, 9), 264: (0, 10), 265: (1, 11),
+                        266: (1, 13), 267: (1, 15), 268: (1, 17),
+                        269: (2, 19), 270: (2, 23), 271: (2, 27),
+                        272: (2, 31), 273: (3, 35), 274: (3, 43),
+                        275: (3, 51), 276: (3, 59), 277: (4, 67),
+                        278: (4, 83), 279: (4, 99), 280: (4, 115),
+                        281: (5, 131), 282: (5, 163), 283: (5, 195),
+                        284: (5, 227), 285: (0, 258)
+                    }
+                    DIST_EXTRA_BITS = {
+                        0: (0, 1), 1: (0, 2), 2: (0, 3), 3: (0, 4),
+                        4: (1, 5), 5: (1, 7), 6: (2, 9), 7: (2, 13),
+                        8: (3, 17), 9: (3, 25), 10: (4, 33), 11: (4, 49),
+                        12: (5, 65), 13: (5, 97), 14: (6, 129), 15: (6, 193),
+                        16: (7, 257), 17: (7, 385), 18: (8, 513), 19: (8, 769),
+                        20: (9, 1025), 21: (9, 1537), 22: (10, 2049), 23: (10, 3073),
+                        24: (11, 4097), 25: (11, 6145), 26: (12, 8193), 27: (12, 12289),
+                        28: (13, 16385), 29: (13, 24577)
+                    }
+                    extra_bits, base_length = LENGTH_EXTRA_BITS[code]
+                    length = bitstream.read(extra_bits) + base_length
+
+                    dist_code = bitstream.read_huffman_code(dist_tree)
+
+                    extra_bits, base_dist = DIST_EXTRA_BITS[dist_code]
+                    dist = bitstream.read(extra_bits) + base_dist
+
+                    for i in range(length):
+                        decompressed.append(decompressed[-dist + i])
+
+                    if INFGEN:
+                        print("match", length, dist)
+    s1 = 1
+    s2 = 0
+    for byte in decompressed:
+        s1 += byte
+        s2 += s1
+    s1 = (1 + sum(decompressed)) % 65521
+    s2 %= 65521
+
+    if INFGEN:
+        print("\n!\nadler")
+    else:
+        print("adler s1", ADLER32_S1, s1)
+        print("adler s2", ADLER32_S2, s2)
+
+    return decompressed
 
 
 class HuffmanTree:
@@ -247,6 +324,13 @@ class HuffmanTree:
             for code, val in codes.items()
         })
 
+    def pairs(self):
+        return sorted([
+            (v, l)
+            for l, d in self._codes_by_length.items()
+            for _, v in d.items()
+        ])
+
 
 class BitBuffer:
     BYTE_LENGTH = 8
@@ -274,32 +358,36 @@ class BitBuffer:
             code = int(format(code, 'b').zfill(read_length)[::-1], 2)
             if tree.contains(code, read_length):
                 self.index += read_length
-                return tree.get(code, read_length), read_length
+                return tree.get(code, read_length)
 
         raise KeyError("no matching huffman code could be found")
 
     def read_code_lengths(self, num_codes: int, tree: HuffmanTree):
         lengths = []
         while len(lengths) < num_codes:
-            code, read_len = self.read_huffman_code(tree)
+            code = self.read_huffman_code(tree)
 
             match code:
                 case 16:
                     prev_code = lengths[-1]
                     rep_len = self.read(2) + 3
-                    print("lens", rep_len)
                     lengths.extend([prev_code] * rep_len)
+                    if INFGEN:
+                        print("repeat", rep_len)
                 case 17:
                     rep_len = self.read(3) + 3
-                    print("zeros", rep_len)
                     lengths.extend([0] * rep_len)
+                    if INFGEN:
+                        print("zeros", rep_len)
                 case 18:
                     rep_len = self.read(7) + 11
-                    print("zeros", rep_len)
                     lengths.extend([0] * rep_len)
+                    if INFGEN:
+                        print("zeros", rep_len)
                 case _:
-                    print("lens", code)
                     lengths.append(code)
+                    if INFGEN:
+                        print("lens", code)
         return lengths
 
     def iter_read(self, times: int, n: int, offset: int = 0):
@@ -349,24 +437,24 @@ class BitBuffer:
         if isinstance(key, int):
             return self._get(1, key)
         if isinstance(key, tuple):
-            if len(key) != 2 and not all(isinstance(k, int) for k in key):
-                class_name = type(self).__name__
-                raise ValueError(
-                    f"{class_name} tuple indices must contain exactly two"
-                    f" integers, i.e. <{class_name} object>[int, int]"
-                )
-            offset, length = key
-            return self._get(length, self.index + offset)
+            match key:
+                case offset, length:
+                    return self._get(length, self.index + offset)
+                case offset, :
+                    return self[self.index + offset:]
+
+            raise ValueError(
+                f"{type(self).__name__} tuple indices must contain 1-2 items"
+            )
         if isinstance(key, slice):
             start, stop, stride = key.indices(self.len)
             start = self.len + start if start < 0 else start
             stop = self.len + stop if stop < 0 else stop
-
-            data = self._get(stop - start, start)
-            if stride == 1:
-                return data
-            else:
-                return int(format(data, 'b')[::stride], base=2)
+            length = stop - start
+            data = self._get(length, start)
+            if stride != 1:
+                data = int(format(data, 'b').zfill(length)[::stride], base=2)
+            return data
 
         raise TypeError(
             f"{type(self).__name__} indices must be integers,"
