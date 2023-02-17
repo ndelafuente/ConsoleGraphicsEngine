@@ -2,6 +2,7 @@ from enum import IntEnum, StrEnum
 import time
 import curses
 import math
+from PngCodec import PngDecoder
 
 from utils.integer import bound, stable_round
 from utils.string import (
@@ -42,6 +43,9 @@ class EscCode(StrEnum):
     ALT_RIGHT = "f"
     FN_ALT_DELETE = "d"
     FN_CMD_DELETE = "3;9~"
+
+
+SPRITE = PngDecoder("car.png")
 
 
 def main(win: curses.window):
@@ -100,7 +104,7 @@ def main(win: curses.window):
                 canvas.draw_circle(canvas_x, canvas_y, j, curses.color_pair(color_i))
                 j = (j + 1) % (min(max_x, max_y) // 2)
             elif button & curses.BUTTON1_DOUBLE_CLICKED:
-                pass
+                canvas.add_sprite(canvas_x, canvas_y, SPRITE)
             elif button & curses.BUTTON1_TRIPLE_CLICKED:
                 win.clear()
                 prompt = "Enter command to try: "
@@ -153,8 +157,20 @@ class VirtualCanvas:
                         self.safe_print(self.p, 120, f"{actual_x, actual_x}")
                         self.p += 1
 
-    def add_sprite(self, x, y, filename: str):
-        raise NotImplementedError # TODO
+    def add_sprite(self, x, y, sprite: PngDecoder):
+        color_palette = set(sprite.pixels.values())
+        def c(v): return round((v / 255) * 1000)
+
+        for i, color in enumerate(color_palette):
+            r, g, b, a = color
+            curses.init_color(20 + i, c(r), c(g), c(b))
+
+        colors = {curses.color_content(color_code): color_code
+                  for color_code in range(curses.COLORS)}
+        for row, col in sprite.pixels:
+            r, g, b, a = sprite.pixels[row, col]
+            color_code = colors[c(r), c(g), c(b)]
+            self.color_virtual_pixel(x + col, y + row, curses.color_pair(color_code))
 
     def safe_print(self, row: int, col: int, str: str, color=None):
         if row < 0:

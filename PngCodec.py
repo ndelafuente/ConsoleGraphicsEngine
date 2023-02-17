@@ -1,3 +1,4 @@
+from enum import IntEnum, StrEnum
 import struct
 
 from collections import Counter, defaultdict
@@ -144,19 +145,34 @@ class PngDecoder:
                 print(f"decoded chunk {name}")
 
         image_data = zlib_decompress(image_data)
-        assert len(image_data) % height == 0
+
+        import numpy as np
+        image = np.empty((height, width, 4), dtype=np.uint8)
+
+        pixels = {}
         bb = BitBuffer(image_data)
-        image = []
-        for _ in range(height):
+        for row in range(height):
             filter_type = bb.read(8)
             if filter_type != 0:
                 raise NotImplementedError("unsupported filter method")
-            for pixel in bb.iter_read(width, bit_depth):
-                r, g, b = palette[pixel]
-                a = alpha_samples[pixel]
-                image.append((r, g, b, a))
+
+            samples_per_byte = bb.BYTE_LENGTH // bit_depth
+            bytes_per_row = width // samples_per_byte
+            col = 0
+            for _ in range(bytes_per_row):
+                byte_data = tuple(bb.iter_read(samples_per_byte, bit_depth))
+                for sample in reversed(byte_data):
+                    r, g, b = palette[sample]
+                    alpha = alpha_samples[sample]
+                    image[row][col] = (r, g, b, alpha)
+                    if alpha != 0:
+                        pixels[row, col] = (r, g, b, alpha)
+                    col += 1
 
         self.image = image
+        self.pixels = pixels
+        self.width = width
+        self.height = height
 
 
 def zlib_decompress(image_data):
@@ -718,7 +734,9 @@ if __name__ == "__main__":
     from sys import argv
     if len(argv) == 2:
         _, filename = argv
-        PngDecoder(filename)
+        png = PngDecoder(filename)
+        from PIL import Image
+        Image.fromarray(png.image, "RGBA").show()
     else:
         print(f"usage: python {argv[0]} <filename>")
         exit(1)

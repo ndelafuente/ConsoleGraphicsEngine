@@ -1,0 +1,220 @@
+! infgen 3.0 output
+!
+zlib
+!
+last			! 1
+dynamic			! 10
+count 266 14 16		! 1100 01101 01001
+! vvv clen_lengths??? vvv
+code 17 4		! 100 000
+code 18 3		! 011
+code 0 2		! 010
+code 6 3		! 011 000 000 000
+code 5 2		! 010 000
+code 4 3		! 011 000
+code 3 5		! 101 000
+code 2 5		! 101 000
+! ^^^ clen_lengths ^^^
+lens 4			! 001
+lens 0			! 00
+lens 6			! 101
+lens 6			! 101
+lens 0			! 00
+lens 0			! 00
+lens 5			! 10
+zeros 9			! 110 0111
+lens 6			! 101
+lens 4			! 001
+lens 0			! 00
+lens 0			! 00
+lens 6			! 101
+zeros 13		! 0000010 011
+lens 5			! 10
+lens 5			! 10
+lens 0			! 00
+lens 6			! 101
+zeros 10		! 111 0111
+lens 5			! 10
+lens 0			! 00
+lens 0			! 00
+lens 5			! 10
+lens 0			! 00
+lens 6			! 101
+zeros 10		! 111 0111
+lens 5			! 10
+lens 6			! 101
+lens 0			! 00
+lens 0			! 00
+lens 5			! 10
+zeros 12		! 0000001 011
+lens 5			! 10
+lens 5			! 10
+lens 0			! 00
+lens 0			! 00
+lens 4			! 001
+lens 5			! 10
+zeros 13		! 0000010 011
+lens 6			! 101
+lens 5			! 10
+lens 4			! 001
+zeros 138		! 1111111 011
+zeros 15		! 0000100 011
+lens 6			! 101
+lens 4			! 001
+lens 4			! 001
+lens 5			! 10
+lens 6			! 101
+lens 6			! 101
+lens 5			! 10
+lens 6			! 101
+lens 0			! 00
+lens 5			! 10
+lens 3			! 11111
+zeros 4			! 001 0111
+lens 2			! 01111
+lens 4			! 001
+lens 3			! 11111
+lens 2			! 01111
+lens 0			! 00
+lens 4			! 001
+lens 0			! 00
+lens 4			! 001
+lens 4			! 001
+! litlen 0 4
+! litlen 2 6
+! litlen 3 6
+! litlen 6 5
+! litlen 16 6
+! litlen 17 4
+! litlen 20 6
+! litlen 34 5
+! litlen 35 5
+! litlen 37 6
+! litlen 48 5
+! litlen 51 5
+! litlen 53 6
+! litlen 64 5
+! litlen 65 6
+! litlen 68 5
+! litlen 81 5
+! litlen 82 5
+! litlen 85 4
+! litlen 86 5
+! litlen 100 6
+! litlen 101 5
+! litlen 102 4
+! litlen 256 6
+! litlen 257 4
+! litlen 258 4
+! litlen 259 5
+! litlen 260 6
+! litlen 261 6
+! litlen 262 5
+! litlen 263 6
+! litlen 265 5
+! dist 0 3
+! dist 5 2
+! dist 6 4
+! dist 7 3
+! dist 8 2
+! dist 10 4
+! dist 12 4
+! dist 13 4
+literal 0		! 0000
+literal 0		! 0000
+match 3 1		! 001 0010
+literal 'f		! 1100
+literal 'f		! 1100
+literal 'f		! 1100
+literal 'D		! 01001
+literal 'D		! 01001
+literal 'D		! 01001
+literal '@		! 10001
+literal 0		! 0000
+match 8 1		! 001 00011
+literal 6		! 00110
+literal 'U		! 0100
+literal 'V		! 10101
+literal 'U		! 0100
+literal 'e		! 01101
+literal 17		! 1000
+literal 17		! 1000
+literal 20		! 111011
+match 9 17		! 000 10 111111
+literal 'e		! 01101
+match 3 17		! 000 10 0010
+literal 'V		! 10101
+literal 'Q		! 11001
+literal 17		! 1000
+literal 17		! 1000
+literal '@		! 10001
+match 12 17		! 000 10 1 10011
+match 11 35		! 0010 1011 0 10011
+literal 6		! 00110
+literal 'f		! 1100
+match 7 1		! 001 011111
+literal 'd		! 110111
+match 3 72		! 00111 0111 0010
+match 12 16		! 11 101 1 10011
+match 8 18		! 001 10 00011
+literal 'f		! 1100
+literal 'U		! 0100
+literal 'U		! 0100
+literal 'V		! 10101
+match 4 14		! 01 101 1010
+match 4 7		! 0 00 1010
+match 5 107		! 01010 1111 11101
+literal 'e		! 01101
+literal 'R		! 00101
+literal '#		! 01110
+literal 'U		! 0100
+match 3 16		! 11 101 0010
+match 5 7		! 0 00 11101
+literal 'Q		! 11001
+literal 20		! 111011
+literal 'D		! 01001
+literal 'A		! 010111
+literal 0		! 0000
+literal 'e		! 01101
+literal '"		! 10110
+literal '"		! 10110
+literal '5		! 100111
+match 4 17		! 000 10 1010
+match 4 7		! 0 00 1010
+match 5 17		! 000 10 11101
+literal 'U		! 0100
+literal '%		! 000111
+literal 'R		! 00101
+match 5 17		! 000 10 11101
+match 4 7		! 0 00 1010
+match 6 69		! 00100 0111 101111
+match 3 10		! 01 0011 0010
+literal 'U		! 0100
+match 3 1		! 001 0010
+match 4 7		! 0 00 1010
+literal 17		! 1000
+literal 17		! 1000
+literal 17		! 1000
+literal 16		! 011011
+literal 0		! 0000
+literal 0		! 0000
+literal '"		! 10110
+literal '"		! 10110
+literal '3		! 00001
+literal 3		! 101011
+literal '3		! 00001
+literal '3		! 00001
+match 8 7		! 0 00 00011
+match 3 1		! 001 0010
+literal 2		! 001011
+literal '#		! 01110
+literal '0		! 11110
+literal 0		! 0000
+literal '3		! 00001
+literal '0		! 11110
+match 8 7		! 0 00 00011
+literal 0		! 0000
+end			! 001111
+			! 00000
+!
+adler
