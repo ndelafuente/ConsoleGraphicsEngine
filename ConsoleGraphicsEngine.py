@@ -1,9 +1,7 @@
-from enum import IntEnum, StrEnum
-import time
 import curses
-import math
-from PngCodec import PngDecoder
+from enum import IntEnum, StrEnum
 
+from PngCodec import PngDecoder
 from utils.integer import bound, stable_round
 from utils.string import (
     delete_next_word,
